@@ -180,7 +180,7 @@
         <div id="levelLabel">CPU LEVEL 1</div>
         <div class="titleButtons">
           <button id="titleStartBtn">START</button>
-          <button id="levelTitleBtn">LEVEL UP</button>
+          
         </div>
       </div>
     </div>
@@ -520,9 +520,17 @@
       shake();
       message.style.display = "block";
       if (player.out && enemy.out) message.textContent = "DRAW";
-      else if (enemy.out) message.textContent = "WIN";
-      else message.textContent = "LOSE";
-      setTimeout(showTitle, 1700);
+      else if (enemy.out) {
+        message.textContent = `LEVEL ${level} CLEAR`;
+        level = Math.min(5, level + 1);
+        applyLevelStats();
+        setTimeout(startGame, 1700);
+      } else {
+        message.textContent = "LOSE";
+        level = 1;
+        applyLevelStats();
+        setTimeout(showTitle, 1700);
+      }
       return;
     }
 
@@ -719,12 +727,7 @@
   }
 
   document.getElementById("titleStartBtn").addEventListener("click", startGame);
-  document.getElementById("levelTitleBtn").addEventListener("click", () => {
-    unlockAudio();
-    level = level >= 5 ? 1 : level + 1;
-    applyLevelStats();
-    playTone(500 + level * 80, 0.08, "square", 0.05);
-  });
+  
 
   window.addEventListener("resize", () => {
     syncCanvasSize();
