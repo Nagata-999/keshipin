@@ -105,6 +105,30 @@
       display: none;
       z-index: 3;
     }
+    #itemBar {
+      position:absolute;
+      left:8px;
+      right:8px;
+      bottom:48px;
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+      justify-content:center;
+      z-index:4;
+      pointer-events:auto;
+    }
+    .itemBtn {
+      font-size:11px;
+      padding:6px 8px;
+      border-radius:999px;
+      box-shadow:0 3px 0 #334155;
+      background:#e0f2fe;
+      color:#0f172a;
+      max-width:92px;
+      overflow:hidden;
+      white-space:nowrap;
+      text-overflow:ellipsis;
+    }
     #controls { display: none; }
     #titleScreen {
       position: absolute;
@@ -174,6 +198,7 @@
         <div id="message"></div>
         <div id="angleInfo"></div>
         <div id="powerBox"><div id="powerFill"></div></div>
+        <div id="itemBar"></div>
       </div>
       <div id="titleScreen">
         <div id="titleLogo">消しピン</div>
@@ -211,6 +236,7 @@
   const drawCanvas = document.getElementById("drawCanvas");
   const dctx = drawCanvas.getContext("2d");
   const levelLabel = document.getElementById("levelLabel");
+  const itemBar = document.getElementById("itemBar");
 
   let W = 420;
   let H = 560;
@@ -226,6 +252,21 @@
   let audioUnlocked = false;
   let flash = 0;
   let particles = [];
+  let inventory = [];
+  let activeBuffs = { power:1, guard:0, big:false, small:false, heavy:false, ghost:false, magnet:false, brake:false, shield:false, doubleShot:false };
+
+  const ITEMS = [
+    { id:"power2", name:"力2倍", desc:"次の一撃が2倍" },
+    { id:"guard2", name:"耐久2倍", desc:"次の被弾を軽減" },
+    { id:"clone", name:"分身", desc:"分身を飛ばす" },
+    { id:"big", name:"巨大化", desc:"大きさ2倍" },
+    { id:"small", name:"縮小", desc:"狙われにくい" },
+    { id:"heavy", name:"重量化", desc:"吹き飛びにくい" },
+    { id:"ghost", name:"すり抜け", desc:"一度だけ落下無効" },
+    { id:"magnet", name:"吸着", desc:"敵方向へ補正" },
+    { id:"brake", name:"急停止", desc:"今すぐ止まる" },
+    { id:"double", name:"二連撃", desc:"次の攻撃を追加" }
+  ];
 
   const titleBgm = new Audio("title.mp3");
   titleBgm.loop = true;
@@ -299,6 +340,7 @@
     for (const e of [player, enemy]) {
       e.vx = 0; e.vy = 0; e.rot = 0; e.out = false;
     }
+    resetBuffs();
     particles = [];
     flash = 0;
     moveFrames = 0;
@@ -308,6 +350,68 @@
     angleInfo.style.display = "none";
     message.style.display = "none";
     draw();
+    renderItems();
+  }
+
+  function resetBuffs() {
+    activeBuffs = { power:1, guard:0, big:false, small:false, heavy:false, ghost:false, magnet:false, brake:false, shield:false, doubleShot:false };
+  }
+
+  function getRandomItem() {
+    return ITEMS[Math.floor(Math.random() * ITEMS.length)];
+  }
+
+  function gainRandomItem() {
+    const item = getRandomItem();
+    inventory.push(item);
+    renderItems();
+    message.style.display = "block";
+    message.textContent = `GET ${item.name}`;
+  }
+
+  function renderItems() {
+    itemBar.innerHTML = "";
+    if (phase === "title") return;
+    inventory.forEach((item, index) => {
+      const btn = document.createElement("button");
+      btn.className = "itemBtn";
+      btn.textContent = item.name;
+      btn.onclick = (ev) => {
+        ev.stopPropagation();
+        useItem(index);
+      };
+      itemBar.appendChild(btn);
+    });
+  }
+
+  function useItem(index) {
+    if (phase === "title" || phase === "gameover" || phase === "cpu_wait") return;
+    const item = inventory.splice(index, 1)[0];
+    if (!item) return;
+
+    if (item.id === "power2") activeBuffs.power *= 2;
+    if (item.id === "guard2") activeBuffs.guard = Math.max(activeBuffs.guard, 0.5);
+    if (item.id === "clone") fireClone();
+    if (item.id === "big") { activeBuffs.big = true; player.w *= 2; player.h *= 2; }
+    if (item.id === "small") { activeBuffs.small = true; player.w *= 0.6; player.h *= 0.6; }
+    if (item.id === "heavy") { activeBuffs.heavy = true; player.mass *= 2.2; }
+    if (item.id === "ghost") activeBuffs.ghost = true;
+    if (item.id === "magnet") activeBuffs.magnet = true;
+    if (item.id === "brake") { player.vx = 0; player.vy = 0; enemy.vx *= 0.45; enemy.vy *= 0.45; }
+    if (item.id === "double") activeBuffs.doubleShot = true;
+
+    playTone(980, 0.08, "square", 0.05);
+    flash = 5;
+    spawnBurst(player.x, player.y, "hit");
+    renderItems();
+  }
+
+  function fireClone() {
+    const angle = normalizeAngle(currentAngle + 18);
+    const dummy = { ...player, x: player.x + 18, y: player.y, vx:0, vy:0, powerBonus: player.powerBonus * 0.7 };
+    shoot(dummy, 70, angle);
+    enemy.vx += dummy.vx * 0.8;
+    enemy.vy += dummy.vy * 0.8;
   }
 
   function startGame() {
@@ -327,6 +431,7 @@
     message.style.display = "none";
     powerBox.style.display = "none";
     angleInfo.style.display = "none";
+    itemBar.innerHTML = "";
     stopGameMusic();
     startTitleMusic();
     prepareBoard();
@@ -372,6 +477,12 @@
       moveFrames = 0;
       angleInfo.style.display = "none";
       shoot(player, currentPower, currentAngle);
+      if (activeBuffs.doubleShot) {
+        activeBuffs.doubleShot = false;
+        setTimeout(() => {
+          if (phase === "moving") shoot(player, Math.max(55, currentPower * 0.75), normalizeAngle(currentAngle + 10));
+        }, 160);
+      }
       return;
     }
   }, { passive: false });
@@ -440,7 +551,12 @@
 
   function shoot(e, power, angleDeg) {
     const rad = angleDeg * Math.PI / 180;
-    const speed = (power / 100) * 28 * e.powerBonus;
+    if (activeBuffs.magnet && e === player) {
+      angleDeg = normalizeAngle(Math.atan2(enemy.y - player.y, enemy.x - player.x) * 180 / Math.PI);
+      activeBuffs.magnet = false;
+    }
+    const speed = (power / 100) * 28 * e.powerBonus * (e === player ? activeBuffs.power : 1);
+    if (e === player) activeBuffs.power = 1;
     e.vx += Math.cos(rad) * speed;
     e.vy += Math.sin(rad) * speed;
     e.rot += (Math.random() - 0.5) * 0.25;
@@ -493,8 +609,10 @@
     const ix = impulse * nx;
     const iy = impulse * ny;
 
-    const aReceive = 1 - a.resistance;
-    const bReceive = 1 - b.resistance;
+    let aReceive = 1 - a.resistance;
+    let bReceive = 1 - b.resistance;
+    if (a === player && activeBuffs.guard > 0) { aReceive *= (1 - activeBuffs.guard); activeBuffs.guard = 0; }
+    if (b === player && activeBuffs.guard > 0) { bReceive *= (1 - activeBuffs.guard); activeBuffs.guard = 0; }
 
     a.vx += (ix / a.mass) * aReceive;
     a.vy += (iy / a.mass) * aReceive;
@@ -519,7 +637,18 @@
       e.vy *= friction;
       e.rot += e.vx * 0.015;
       if (Math.hypot(e.vx, e.vy) < stopSpeed || moveFrames > maxMoveFrames) { e.vx = 0; e.vy = 0; }
-      if (e.x < tableMargin || e.x > W - tableMargin || e.y < tableMargin || e.y > H - tableMargin) e.out = true;
+      if (e.x < tableMargin || e.x > W - tableMargin || e.y < tableMargin || e.y > H - tableMargin) {
+        if (e === player && activeBuffs.ghost) {
+          activeBuffs.ghost = false;
+          e.x = Math.min(W - tableMargin - 10, Math.max(tableMargin + 10, e.x));
+          e.y = Math.min(H - tableMargin - 10, Math.max(tableMargin + 10, e.y));
+          e.vx *= -0.3;
+          e.vy *= -0.3;
+          flash = 8;
+        } else {
+          e.out = true;
+        }
+      }
     }
 
     resolveCollision(player, enemy);
@@ -536,11 +665,13 @@
       if (player.out && enemy.out) message.textContent = "DRAW";
       else if (enemy.out) {
         message.textContent = `LEVEL ${level} CLEAR`;
+        gainRandomItem();
         level = Math.min(5, level + 1);
         applyLevelStats();
-        setTimeout(startGame, 1700);
+        setTimeout(startGame, 1900);
       } else {
         message.textContent = "LOSE";
+        inventory = [];
         level = 1;
         applyLevelStats();
         setTimeout(showTitle, 1700);
