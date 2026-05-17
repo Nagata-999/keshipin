@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>消しピン</title>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+    body {
+      background: radial-gradient(circle at top, #334155, #020617);
+      color: #fff;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      touch-action: none;
+    }
+    #app {
+      width: 100vw;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 8px;
+    }
+    #topPanel {
+      width: min(96vw, 520px);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      font-size: 12px;
+      opacity: 0.96;
+    }
+    .card {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 12px;
+      padding: 7px 9px;
+      line-height: 1.28;
+      min-height: 58px;
+    }
+    .name { font-weight: 900; font-size: 13px; margin-bottom: 2px; }
+    #gameWrap {
+      position: relative;
+      width: min(96vw, 520px);
+      height: min(76dvh, 680px);
+      min-height: 420px;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 18px 45px rgba(0,0,0,0.48);
+      background: #6b3f22;
+      border: 6px solid #3b2415;
+      flex: 1 1 auto;
+    }
+    canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #9a6135;
+    }
+    #uiLayer { position: absolute; inset: 0; pointer-events: none; }
+    #message {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      min-width: 120px;
+      max-width: calc(100% - 24px);
+      text-align: center;
+      font-weight: 1000;
+      font-size: 26px;
+      padding: 7px 16px;
+      border-radius: 999px;
+      background: rgba(15,23,42,0.58);
+      color: #fff;
+      text-shadow: 0 3px 0 rgba(0,0,0,0.35);
+      z-index: 3;
+      display: none;
+    }
+    #powerBox {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 14px;
+      height: 26px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.48);
+      border: 2px solid rgba(255,255,255,0.65);
+      overflow: hidden;
+      display: none;
+      z-index: 3;
+      box-shadow: 0 0 18px rgba(250,204,21,0.2);
+    }
+    #powerFill { height: 100%; width: 0%; background: linear-gradient(90deg, #22c55e, #facc15, #ef4444); }
+    #angleInfo {
+      position: absolute;
+      right: 12px;
+      bottom: 48px;
+      padding: 5px 9px;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.5);
+      font-size: 12px;
+      display: none;
+      z-index: 3;
+    }
+    #controls { display: none; }
+    #titleScreen {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 50% 20%, rgba(250,204,21,0.18), rgba(2,6,23,0.88) 58%, rgba(0,0,0,0.96));
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      gap: 20px;
+      text-align: center;
+    }
+    #titleLogo {
+      font-size: clamp(48px, 15vw, 86px);
+      font-weight: 1000;
+      letter-spacing: 4px;
+      color: #facc15;
+      text-shadow: 0 7px 0 #92400e, 0 16px 26px rgba(0,0,0,0.65);
+      transform: rotate(-3deg);
+    }
+    #levelLabel {
+      font-size: 18px;
+      font-weight: 900;
+      color: #e5e7eb;
+      opacity: 0.95;
+    }
+    .titleButtons {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      width: min(78%, 300px);
+    }
+    button {
+      border: 0;
+      border-radius: 16px;
+      padding: 15px 18px;
+      font-weight: 1000;
+      font-size: 20px;
+      background: #facc15;
+      color: #111827;
+      box-shadow: 0 6px 0 #b45309, 0 14px 25px rgba(0,0,0,0.3);
+    }
+    button:active { transform: translateY(4px); box-shadow: 0 2px 0 #b45309; }
+    #levelTitleBtn { background: #38bdf8; box-shadow: 0 6px 0 #0369a1, 0 14px 25px rgba(0,0,0,0.3); }
+    .shake { animation: shake 0.17s linear; }
+    @keyframes shake {
+      0% { transform: translate(0,0); }
+      20% { transform: translate(-7px,3px); }
+      40% { transform: translate(7px,-3px); }
+      60% { transform: translate(-5px,2px); }
+      80% { transform: translate(5px,-1px); }
+      100% { transform: translate(0,0); }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="topPanel">
+      <div class="card"><div class="name">YOU</div><div id="playerStats"></div></div>
+      <div class="card"><div class="name">CPU</div><div id="enemyStats"></div></div>
+    </div>
+
+    <div id="gameWrap">
+      <canvas id="game"></canvas>
+      <div id="uiLayer">
+        <div id="message"></div>
+        <div id="angleInfo"></div>
+        <div id="powerBox"><div id="powerFill"></div></div>
+      </div>
+      <div id="titleScreen">
+        <div id="titleLogo">消しピン</div>
+        <div id="levelLabel">CPU LEVEL 1</div>
+        <div class="titleButtons">
+          <button id="titleStartBtn">START</button>
+          <button id="levelTitleBtn">LEVEL UP</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const wrap = document.getElementById("gameWrap");
+  const message = document.getElementById("message");
+  const powerBox = document.getElementById("powerBox");
+  const powerFill = document.getElementById("powerFill");
+  const angleInfo = document.getElementById("angleInfo");
+  const playerStats = document.getElementById("playerStats");
+  const enemyStats = document.getElementById("enemyStats");
+  const titleScreen = document.getElementById("titleScreen");
+  const levelLabel = document.getElementById("levelLabel");
+
+  let W = 420;
+  let H = 560;
+  let level = 1;
+  let phase = "title";
+  let turn = "player";
+  let currentPower = 0;
+  let powerDir = 1;
+  let currentAngle = 270;
+  let lastTime = performance.now();
+  let cpuTimer = null;
+  let moveFrames = 0;
+  let audioUnlocked = false;
+  let flash = 0;
+  let particles = [];
+
+  const titleBgm = new Audio("title.mp3");
+  titleBgm.loop = true;
+  titleBgm.volume = 0.42;
+
+  const gameBgm = new Audio("music.mp3");
+  gameBgm.loop = true;
+  gameBgm.volume = 0.48;
+
+  const tableMargin = 22;
+  const friction = 0.91;
+  const stopSpeed = 0.9;
+  const maxMoveFrames = 70;
+
+  const player = makeEraser("YOU", "#e5e7eb", "#111827");
+  const enemy = makeEraser("CPU", "#f97316", "#7c2d12");
+
+  function makeEraser(label, color, edge) {
+    return { label, x: 0, y: 0, w: 56, h: 36, vx: 0, vy: 0, rot: 0, mass: 1, powerBonus: 1, resistance: 0, color, edge, out: false };
+  }
+
+  function cpuErrorDegByLevel(lv) { return Math.max(0, 50 - (lv - 1) * 10); }
+  function resistanceByLevel(lv) { return Math.min(0.8, (lv - 1) * 0.2); }
+
+  function syncCanvasSize() {
+    const r = wrap.getBoundingClientRect();
+    W = Math.max(300, Math.floor(r.width || 420));
+    H = Math.max(390, Math.floor(r.height || 560));
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function applyLevelStats() {
+    player.mass = 1 + Math.floor((level - 1) / 3) * 0.15;
+    player.powerBonus = 1 + Math.floor((level - 1) / 2) * 0.08;
+    player.resistance = resistanceByLevel(level);
+    player.w = 56 + Math.floor((level - 1) / 4) * 4;
+    player.h = 36 + Math.floor((level - 1) / 4) * 2;
+
+    enemy.mass = 1 + (level - 1) * 0.14;
+    enemy.powerBonus = 1 + (level - 1) * 0.05;
+    enemy.resistance = resistanceByLevel(level);
+    enemy.w = 56 + Math.floor(level / 4) * 3;
+    enemy.h = 36 + Math.floor(level / 4) * 2;
+
+    updateStats();
+  }
+
+  function updateStats() {
+    playerStats.innerHTML = `Lv.${level}<br>POWER ${player.powerBonus.toFixed(2)} / GUARD ${Math.round(player.resistance * 100)}%`;
+    enemyStats.innerHTML = `Lv.${level}<br>AIM ±${cpuErrorDegByLevel(level)}° / GUARD ${Math.round(enemy.resistance * 100)}%`;
+    levelLabel.textContent = `CPU LEVEL ${level}`;
+  }
+
+  function placeErasers() {
+    player.x = W * 0.5;
+    player.y = H * 0.79;
+    enemy.x = W * 0.5;
+    enemy.y = H * 0.23;
+  }
+
+  function prepareBoard() {
+    if (cpuTimer) clearTimeout(cpuTimer);
+    syncCanvasSize();
+    applyLevelStats();
+    placeErasers();
+    for (const e of [player, enemy]) {
+      e.vx = 0; e.vy = 0; e.rot = 0; e.out = false;
+    }
+    particles = [];
+    flash = 0;
+    moveFrames = 0;
+    currentPower = 0;
+    currentAngle = 270;
+    powerBox.style.display = "none";
+    angleInfo.style.display = "none";
+    message.style.display = "none";
+    draw();
+  }
+
+  function startGame() {
+    unlockAudio();
+    stopTitleMusic();
+    startGameMusic();
+    titleScreen.style.display = "none";
+    prepareBoard();
+    phase = "idle";
+    turn = "player";
+  }
+
+  function showTitle() {
+    if (cpuTimer) clearTimeout(cpuTimer);
+    phase = "title";
+    titleScreen.style.display = "flex";
+    message.style.display = "none";
+    powerBox.style.display = "none";
+    angleInfo.style.display = "none";
+    stopGameMusic();
+    startTitleMusic();
+    prepareBoard();
+  }
+
+  function pointerPos(ev) {
+    const r = canvas.getBoundingClientRect();
+    return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+  }
+
+  function pointInEraser(x, y, e) {
+    return x >= e.x - e.w / 2 && x <= e.x + e.w / 2 && y >= e.y - e.h / 2 && y <= e.y + e.h / 2;
+  }
+
+  canvas.addEventListener("pointerdown", (ev) => {
+    ev.preventDefault();
+    if (phase === "title" || phase === "cpu_wait" || phase === "moving" || phase === "gameover") return;
+    const p = pointerPos(ev);
+
+    if (phase === "idle") {
+      if (pointInEraser(p.x, p.y, player)) {
+        phase = "power";
+        currentPower = 0;
+        powerDir = 1;
+        powerBox.style.display = "block";
+        angleInfo.style.display = "none";
+        playTone(520, 0.045, "square", 0.035);
+      }
+      return;
+    }
+
+    if (phase === "power") {
+      phase = "angle";
+      powerBox.style.display = "none";
+      angleInfo.style.display = "block";
+      playTone(760, 0.045, "square", 0.035);
+      return;
+    }
+
+    if (phase === "angle") {
+      phase = "moving";
+      turn = "player";
+      moveFrames = 0;
+      angleInfo.style.display = "none";
+      shoot(player, currentPower, currentAngle);
+      return;
+    }
+  }, { passive: false });
+
+  function unlockAudio() {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+    for (const a of [titleBgm, gameBgm]) {
+      a.play().then(() => { a.pause(); a.currentTime = 0; }).catch(() => {});
+    }
+    initAudioContext();
+  }
+
+  function startTitleMusic() {
+    if (!audioUnlocked) return;
+    gameBgm.pause();
+    if (titleBgm.paused) titleBgm.play().catch(() => {});
+  }
+
+  function stopTitleMusic() { titleBgm.pause(); titleBgm.currentTime = 0; }
+  function startGameMusic() {
+    if (!audioUnlocked) return;
+    titleBgm.pause();
+    if (gameBgm.paused) gameBgm.play().catch(() => {});
+  }
+  function stopGameMusic() { gameBgm.pause(); gameBgm.currentTime = 0; }
+
+  let audioCtx = null;
+  function initAudioContext() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+  }
+
+  function playTone(freq, dur = 0.08, type = "square", vol = 0.05) {
+    if (!audioUnlocked) return;
+    initAudioContext();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.value = vol;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+    gain.gain.setValueAtTime(vol, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    osc.start(now);
+    osc.stop(now + dur);
+  }
+
+  function playHitSE() {
+    playTone(140, 0.07, "sawtooth", 0.08);
+    setTimeout(() => playTone(90, 0.06, "square", 0.055), 35);
+  }
+
+  function playFallSE() {
+    playTone(180, 0.12, "sawtooth", 0.08);
+    setTimeout(() => playTone(95, 0.14, "sawtooth", 0.07), 80);
+    setTimeout(() => playTone(55, 0.18, "sine", 0.07), 170);
+  }
+
+  function playShootSE(power) {
+    playTone(360 + power * 5, 0.055, "square", 0.045);
+    setTimeout(() => playTone(720 + power * 4, 0.045, "square", 0.035), 40);
+  }
+
+  function shoot(e, power, angleDeg) {
+    const rad = angleDeg * Math.PI / 180;
+    const speed = (power / 100) * 28 * e.powerBonus;
+    e.vx += Math.cos(rad) * speed;
+    e.vy += Math.sin(rad) * speed;
+    e.rot += (Math.random() - 0.5) * 0.25;
+    spawnBurst(e.x, e.y, "shoot");
+    playShootSE(power);
+  }
+
+  function cpuShoot() {
+    const dx = player.x - enemy.x;
+    const dy = player.y - enemy.y;
+    let baseAngle = normalizeAngle(Math.atan2(dy, dx) * 180 / Math.PI);
+    const errorMax = cpuErrorDegByLevel(level);
+    const miss = (Math.random() * 2 - 1) * errorMax;
+    const power = Math.min(100, 48 + level * 8 + Math.random() * 18);
+    const angle = normalizeAngle(baseAngle + miss);
+    currentPower = power;
+    currentAngle = angle;
+    phase = "moving";
+    turn = "cpu";
+    moveFrames = 0;
+    shoot(enemy, power, angle);
+  }
+
+  function normalizeAngle(a) { a %= 360; if (a < 0) a += 360; return a; }
+
+  function rectsOverlap(a, b) {
+    return Math.abs(a.x - b.x) < (a.w + b.w) / 2 && Math.abs(a.y - b.y) < (a.h + b.h) / 2;
+  }
+
+  function resolveCollision(a, b) {
+    if (!rectsOverlap(a, b)) return;
+
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const nx = dx / dist;
+    const ny = dy / dist;
+
+    const push = 10;
+    a.x -= nx * push; a.y -= ny * push;
+    b.x += nx * push; b.y += ny * push;
+
+    const rvx = a.vx - b.vx;
+    const rvy = a.vy - b.vy;
+    const relVel = rvx * nx + rvy * ny;
+    if (relVel > 0) return;
+
+    const restitution = 0.94;
+    const impulse = -(1 + restitution) * relVel / (1 / a.mass + 1 / b.mass);
+    const ix = impulse * nx;
+    const iy = impulse * ny;
+
+    const aReceive = 1 - a.resistance;
+    const bReceive = 1 - b.resistance;
+
+    a.vx += (ix / a.mass) * aReceive;
+    a.vy += (iy / a.mass) * aReceive;
+    b.vx -= (ix / b.mass) * bReceive;
+    b.vy -= (iy / b.mass) * bReceive;
+
+    a.rot += (Math.random() - 0.5) * 1.0;
+    b.rot += (Math.random() - 0.5) * 1.0;
+    flash = 7;
+    spawnBurst((a.x + b.x) / 2, (a.y + b.y) / 2, "hit");
+    shake();
+    playHitSE();
+  }
+
+  function updatePhysics() {
+    moveFrames++;
+
+    for (const e of [player, enemy]) {
+      e.x += e.vx;
+      e.y += e.vy;
+      e.vx *= friction;
+      e.vy *= friction;
+      e.rot += e.vx * 0.015;
+      if (Math.hypot(e.vx, e.vy) < stopSpeed || moveFrames > maxMoveFrames) { e.vx = 0; e.vy = 0; }
+      if (e.x < tableMargin || e.x > W - tableMargin || e.y < tableMargin || e.y > H - tableMargin) e.out = true;
+    }
+
+    resolveCollision(player, enemy);
+
+    if (player.out || enemy.out) {
+      phase = "gameover";
+      powerBox.style.display = "none";
+      angleInfo.style.display = "none";
+      stopGameMusic();
+      playFallSE();
+      flash = 12;
+      shake();
+      message.style.display = "block";
+      if (player.out && enemy.out) message.textContent = "DRAW";
+      else if (enemy.out) message.textContent = "WIN";
+      else message.textContent = "LOSE";
+      setTimeout(showTitle, 1700);
+      return;
+    }
+
+    if (phase === "moving" && isStopped()) {
+      if (turn === "player") {
+        phase = "cpu_wait";
+        cpuTimer = setTimeout(() => { if (phase === "cpu_wait") cpuShoot(); }, 420);
+      } else if (turn === "cpu") {
+        turn = "player";
+        phase = "idle";
+      }
+    }
+  }
+
+  function isStopped() { return player.vx === 0 && player.vy === 0 && enemy.vx === 0 && enemy.vy === 0; }
+
+  function spawnBurst(x, y, type) {
+    const count = type === "hit" ? 18 : 8;
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = (type === "hit" ? 2.5 : 1.6) + Math.random() * 4;
+      particles.push({
+        x, y,
+        vx: Math.cos(a) * s,
+        vy: Math.sin(a) * s,
+        life: type === "hit" ? 24 : 16,
+        max: type === "hit" ? 24 : 16,
+        size: type === "hit" ? 4 + Math.random() * 4 : 3 + Math.random() * 3,
+        color: type === "hit" ? "#facc15" : "#e0f2fe"
+      });
+    }
+  }
+
+  function updateParticles() {
+    particles = particles.filter(p => p.life > 0);
+    for (const p of particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vx *= 0.94;
+      p.vy *= 0.94;
+      p.life--;
+    }
+  }
+
+  function shake() {
+    wrap.classList.remove("shake");
+    void wrap.offsetWidth;
+    wrap.classList.add("shake");
+  }
+
+  function draw() {
+    drawTable();
+    if (phase === "angle") drawAimNeedle();
+    drawEraser(enemy);
+    drawEraser(player);
+    drawParticles();
+    drawFlash();
+  }
+
+  function drawTable() {
+    ctx.clearRect(0, 0, W, H);
+    const grad = ctx.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, "#b87942");
+    grad.addColorStop(1, "#7c421f");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.globalAlpha = 0.25;
+    ctx.strokeStyle = "#f3c38a";
+    ctx.lineWidth = 2;
+    for (let y = 25; y < H; y += 44) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.bezierCurveTo(W * 0.25, y + 14, W * 0.7, y - 16, W, y + 8);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = "rgba(255,255,255,0.82)";
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 8]);
+    ctx.strokeRect(tableMargin, tableMargin, W - tableMargin * 2, H - tableMargin * 2);
+    ctx.setLineDash([]);
+  }
+
+  function drawEraser(e) {
+    ctx.save();
+    ctx.translate(e.x, e.y);
+    ctx.rotate(e.rot);
+
+    ctx.fillStyle = "rgba(0,0,0,0.28)";
+    roundRect(-e.w / 2 + 5, -e.h / 2 + 7, e.w, e.h, 9);
+    ctx.fill();
+
+    ctx.fillStyle = e.color;
+    ctx.strokeStyle = e.edge;
+    ctx.lineWidth = 3;
+    roundRect(-e.w / 2, -e.h / 2, e.w, e.h, 9);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(255,255,255,0.52)";
+    roundRect(-e.w / 2 + 7, -e.h / 2 + 6, e.w - 14, 8, 4);
+    ctx.fill();
+
+    ctx.fillStyle = e.edge;
+    ctx.font = "bold 13px system-ui";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(e.label, 0, 3);
+    ctx.restore();
+  }
+
+  function drawAimNeedle() {
+    const rad = currentAngle * Math.PI / 180;
+    const len = 108;
+    const sx = player.x;
+    const sy = player.y;
+    const ex = sx + Math.cos(rad) * len;
+    const ey = sy + Math.sin(rad) * len;
+
+    ctx.strokeStyle = "rgba(34,197,94,0.4)";
+    ctx.lineWidth = 13;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+
+    ctx.strokeStyle = "#22c55e";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+
+    ctx.fillStyle = "#22c55e";
+    ctx.beginPath();
+    ctx.arc(ex, ey, 9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      ctx.globalAlpha = Math.max(0, p.life / p.max);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawFlash() {
+    if (flash <= 0) return;
+    ctx.fillStyle = `rgba(255,255,255,${Math.min(0.42, flash * 0.045)})`;
+    ctx.fillRect(0, 0, W, H);
+    flash--;
+  }
+
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  function loop(t) {
+    const dt = Math.min(32, t - lastTime || 16);
+    lastTime = t;
+
+    if (phase === "power") {
+      currentPower += powerDir * dt * 0.12;
+      if (currentPower >= 100) { currentPower = 100; powerDir = -1; }
+      if (currentPower <= 0) { currentPower = 0; powerDir = 1; }
+      powerFill.style.width = currentPower + "%";
+    }
+
+    if (phase === "angle") {
+      currentAngle = normalizeAngle(currentAngle + dt * 0.25);
+      angleInfo.textContent = `${Math.round(currentAngle)}°`;
+    }
+
+    if (phase === "moving") updatePhysics();
+    updateParticles();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  document.getElementById("titleStartBtn").addEventListener("click", startGame);
+  document.getElementById("levelTitleBtn").addEventListener("click", () => {
+    unlockAudio();
+    level = level >= 5 ? 1 : level + 1;
+    applyLevelStats();
+    playTone(500 + level * 80, 0.08, "square", 0.05);
+  });
+
+  window.addEventListener("resize", () => {
+    syncCanvasSize();
+    placeErasers();
+    draw();
+  });
+
+  requestAnimationFrame(() => {
+    syncCanvasSize();
+    applyLevelStats();
+    placeErasers();
+    draw();
+    requestAnimationFrame(loop);
+  });
+})();
+</script>
+</body>
+</html>
